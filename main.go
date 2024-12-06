@@ -18,10 +18,17 @@ import (
 var start int
 var pline int
 
+var symbols []rune
+
 func main() {
+	symbols = []rune("󰞔󰪸󰸞")
 	/*
+		//  ╭───╮
+		//  │  │
+		//  ╰───╯
 		disk := "nvme0n1"
 		parts := getPartitions()
+		mounted_parts(disk, parts)
 		fmt.Println(parts)
 		for _, val := range parts {
 			x, y := get_used_p(disk+"p"+val[0], val[4])
@@ -69,16 +76,30 @@ func main() {
 
 func refresh(screen tcell.Screen) {
 	start = 0
-	pline = 12
+	pline = 25
 	// style := tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#FF8040"))
-	width, _ := screen.Size()
+	width, height := screen.Size()
 	// screen.SetContent(10, 5, 'H', nil, style)
 	// screen.SetContent(11, 5, 'i', nil, style)
 	// draw_box(screen, 0, 0, width-1, height-1, style, "═║╔╚╗╝")
 	// draw_box(screen, 45, 10, 85, 20, style, "═║╔╚╗╝")
 	disk := "nvme0n1"
 	parts := getPartitions()
+	mounted_parts(disk, parts)
 	empty_parts := 0
+	if width > 100 {
+		print_at(screen, 3, 1, string(symbols[0]), tcell.StyleDefault.Foreground(tcell.GetColor("#00FF00")))
+		print_at(screen, 6, 1, string(symbols[1]), tcell.StyleDefault.Foreground(tcell.GetColor("#FF0000")))
+		print_at(screen, 9, 1, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		print_at(screen, 11, 1, string(symbols[2]), tcell.StyleDefault.Foreground(tcell.GetColor("#FFFFFF")))
+		print_at(screen, 14, 1, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		print_at(screen, 16, 1, string(symbols[3]), tcell.StyleDefault.Foreground(tcell.GetColor("#FFFFAA")))
+		print_at(screen, 19, 1, string(symbols[4]), tcell.StyleDefault.Foreground(tcell.GetColor("#FFFFAA")))
+		print_at(screen, 22, 1, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		print_at(screen, 24, 1, string(symbols[5]), tcell.StyleDefault.Foreground(tcell.GetColor("#FFFF00")))
+		print_at(screen, 27, 1, string(symbols[6]), tcell.StyleDefault.Foreground(tcell.GetColor("#00FF00")))
+		print_head(screen, width, height)
+	}
 	for _, val := range parts {
 		size, err := strconv.ParseFloat(strings.TrimRight(val[3], "GB"), 64)
 		if err != nil {
@@ -89,17 +110,17 @@ func refresh(screen tcell.Screen) {
 			empty_parts++
 		}
 	}
-	for _, val := range parts {
-		x, y := get_used_p(disk+"p"+val[0], val[4])
-		if y != nil {
+	for i, val := range parts {
+		x, ey := get_used_p(disk+"p"+val[0], val[4])
+		if ey != nil {
 			// fmt.Println(disk+"p"+val[0], val[4], "--")
 			size, err := strconv.ParseFloat(strings.TrimRight(val[3], "GB"), 64)
 			if err != nil {
 				fmt.Println("Error parsing used space:", err)
 				return
 			}
-			print_it(screen, fmt.Sprint(((size / 512) * 100)))
-			draw_it(screen, ((size / 512) * 100), 0, width, val[4])
+			// print_it(screen, fmt.Sprint(((size / 512) * 100)))
+			draw_it(screen, ((size / 512) * 100), 0, width, val[4], "/dev/"+disk+"p"+val[0], val[3])
 		} else {
 			// fmt.Println(disk+"p"+val[0], val[4], fmt.Sprintf("%.2f%%", x))
 			// print_it(screen, fmt.Sprintf("%.2f%%", x)+":hello:"+fmt.Sprintf("%d", int(math.Round(x))), style)
@@ -108,11 +129,12 @@ func refresh(screen tcell.Screen) {
 				fmt.Println("Error parsing used space:", err)
 				return
 			}
-			print_it(screen, fmt.Sprint(float64(width)/100))
-			draw_it(screen, ((size/512)*100)-float64(empty_parts)/(float64(width)/86), int(math.Round(x)), width, val[4])
+			// print_it(screen, fmt.Sprint(float64(width)/100))
+			draw_it(screen, ((size/512)*100)-float64(empty_parts)/(float64(width)/86), int(math.Round(x)), width, val[4], "/dev/"+disk+"p"+val[0], val[3])
 		}
+		list_it(screen, width, height, i, val, x, disk)
 	}
-
+	draw_box(screen, 7, 24, 47, pline, tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#FFFF00")), "")
 }
 
 func getPartitions() [][]string {
@@ -128,15 +150,59 @@ func getPartitions() [][]string {
 
 	// Regular expression to extract partition information
 	// Example format: " 1     1049MB  100GB   100GB  ext4"
-	re := regexp.MustCompile(`\s*(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)`)
-	matches := re.FindAllStringSubmatch(outputStr, -1)
+	re := regexp.MustCompile(`^\s*(\d+)\s{2,15}(\S+)\s{2,15}(\S+)\s{2,15}(\S+)(?:\s{2,15}(\S*))?(?:\s{2,15}((?:[A-Za-z]*\s??)*))?(?:\s{2,}((?:\S+(?:, )?)*))?$`)
+	lines := strings.Split(outputStr, "\n")
 	x := [][]string{}
+	for _, line := range lines {
+		matches := re.FindAllStringSubmatch(line, -1)
+		if len(matches) == 1 {
+			vals := []string{matches[0][1], matches[0][2], matches[0][3], matches[0][4], strings.TrimSpace(matches[0][5]), strings.TrimSpace(matches[0][6]), strings.TrimSpace(matches[0][7])}
+			// fmt.Println(vals)
+			x = append(x, vals)
+		}
+	}
 	// Iterate through matches and extract partition details
-	for _, match := range matches {
+	/*for _, match := range matches {
 		// match[0] is the full match, match[1] is the partition number, and match[2] to match[5] are the other columns
 		vals := []string{match[1], match[2], match[3], match[4], match[5]}
 		x = append(x, vals)
+	}*/
+	return x
+}
+
+func mounted_parts(disk string, parts [][]string) [][]string {
+	cmd := exec.Command("df", "-h") // Replace "/dev/sda" with the target disk
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Fatalf("Error executing command: %v", err)
 	}
+
+	// Convert output to string
+	outputStr := string(output)
+
+	x := [][]string{}
+
+	lines := strings.Split(outputStr, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "/dev/"+disk) {
+			re := regexp.MustCompile(`^(\S+?) .* (\S+?)$`)
+			matches := re.FindAllStringSubmatch(line, -1)
+			for i, part := range parts {
+				// fmt.Println(string(line), []string{matches[0][1], matches[0][2]}, "/dev/"+disk+"p"+part[0], matches[0][1])
+				if "/dev/"+disk+"p"+part[0] == matches[0][1] {
+					parts[i] = append(parts[i], strings.TrimSpace(matches[0][2]))
+				}
+			}
+			x = append(x, []string{matches[0][1], matches[0][2]})
+		}
+	}
+
+	for i, part := range parts {
+		if len(part) > 6 {
+			parts[i] = append(parts[i], "")
+		}
+	}
+
 	return x
 }
 
@@ -244,7 +310,118 @@ func get_used_p(part, tip string) (float64, error) { // `tip` is turkish for typ
 	}
 }
 
-func draw_it(s tcell.Screen, percent float64, filled, width int, tip string) {
+func list_it(s tcell.Screen, width, _, index int, val []string, x float64, disk string) {
+	start_n := 0
+	used_p := "--"
+	if x > 0 {
+		used_p = fmt.Sprintf("%.2f%%", x)
+	}
+	colors := map[string]string{
+		"ntfs":           "#61f8d0",
+		"fat32":          "#76FF86",
+		"ext4":           "#81AeCc",
+		"linux-swap(v1)": "#E1968a",
+	}
+	tip := "unknown"
+	if val[4] != "" {
+		tip = val[4]
+	}
+	stuff := []string{
+		"/dev/" + disk + "p" + val[0],
+		val[5],
+		tip,
+		val[7],
+		"IDK",
+		val[3],
+		used_p,
+		val[6],
+	}
+	print_it(s, fmt.Sprint(val[5], val[6], val[7]))
+	categories_width := []int{
+		15,
+		20,
+		15,
+		10,
+		14,
+		8,
+		8,
+		10,
+	}
+	for i := 0; i < len(categories_width); i++ {
+		start_n++
+		width_n := int((float64(categories_width[i]) / 100) * float64(width))
+		thing := " " + stuff[i]
+		if i != 2 {
+			// print_it(s, thing)
+			print_at(s, start_n, index+10, thing, tcell.StyleDefault)
+		} else {
+			color, exists := colors[val[4]]
+			var style tcell.Style
+			if exists {
+				style = tcell.StyleDefault.Foreground(tcell.GetColor(color))
+			} else {
+				style = tcell.StyleDefault.Foreground(tcell.GetColor("#888888"))
+			}
+			print_at(s, start_n+1, index+10, " ", style)
+			print_at(s, start_n+2, index+10, thing, tcell.StyleDefault)
+		}
+		start_n += width_n
+	}
+}
+
+func print_head(s tcell.Screen, width, height int) {
+	start_n := 0
+	print_at(s, start_n, 7, "┌", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	print_at(s, start_n, 8, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	print_at(s, start_n, height-2, "└", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	for x := 9; x < height-2; x++ {
+		print_at(s, start_n, x, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	}
+	categories := []string{
+		"Partition",
+		"Name",
+		"File System",
+		"Mount Point",
+		"Label",
+		"Size",
+		"Used %",
+		"Flags",
+	}
+	categories_width := []int{
+		15,
+		20,
+		15,
+		10,
+		14,
+		8,
+		8,
+		10,
+	}
+	for i := 0; i < len(categories); i++ {
+		width_n := int((float64(categories_width[i]) / 100) * float64(width))
+		str := " " + categories[i]
+		start_n++
+		print_at(s, start_n, 7, strings.Repeat("─", width_n)+"┬", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		print_at(s, start_n, height-2, strings.Repeat("─", width_n)+"┴", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		print_at(s, start_n, 8, str, tcell.StyleDefault)
+		print_at(s, start_n+width_n, 8, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		for x := 9; x < height-2; x++ {
+			print_at(s, start_n+width_n, x, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		}
+		print_at(s, start_n, 9, strings.Repeat("─", width_n)+"┼", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+		start_n += width_n
+	}
+	print_at(s, width-1, 7, "┐", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	print_at(s, width-1, 8, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	print_at(s, width-1, height-2, "┘", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	print_at(s, 0, 9, "├", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	for x := 9; x < height-2; x++ {
+		print_at(s, width-1, x, "│", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+	}
+	print_at(s, width-1, 9, "┤", tcell.StyleDefault.Foreground(tcell.GetColor("#555555")))
+}
+
+func draw_it(s tcell.Screen, percent float64, filled, width int, tip, partn, size string) {
 	chars_i := "🬂▐🬕🬲🬨🬷▌🬭"
 	// chars_i := "─│╭╰╮╯"
 	x := start + int((float64(percent)/100)*float64(width-2))
@@ -254,7 +431,7 @@ func draw_it(s tcell.Screen, percent float64, filled, width int, tip string) {
 		x = start + 1
 	}
 	colors := map[string]string{
-		"ntfs":           "#90F2D1",
+		"ntfs":           "#41e8b0",
 		"fat32":          "#46a046",
 		"ext4":           "#314e6c",
 		"linux-swap(v1)": "#c1665a",
@@ -263,15 +440,15 @@ func draw_it(s tcell.Screen, percent float64, filled, width int, tip string) {
 	var style tcell.Style
 	var style_box tcell.Style
 	if exists {
-		style = tcell.StyleDefault.Background(tcell.GetColor("#cfc174")).Foreground(tcell.GetColor(color))
+		style = tcell.StyleDefault.Background(tcell.GetColor("#fce03f")).Foreground(tcell.GetColor(color))
 		style_box = tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor(color))
 	} else {
-		style = tcell.StyleDefault.Background(tcell.GetColor("#cfc174")).Foreground(tcell.GetColor("#555555"))
+		style = tcell.StyleDefault.Background(tcell.GetColor("#fce03f")).Foreground(tcell.GetColor("#555555"))
 		style_box = tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#555555"))
 	}
-	// print_it(s, tip, style)
-	draw_box(s, start, 2, x, 5, style_box, chars_i)
-	for y := 2; y <= 5; y++ {
+	// print_it(s, tip)
+	draw_box(s, start, 3, x, 6, style_box, chars_i)
+	for y := 3; y <= 6; y++ {
 		for x1 := start + 1; x1 < start+int((float64(filled)/100)*((float64(percent)/100)*float64(width))); x1++ {
 			char, _, _, _ := s.GetContent(x1, y)
 			if char == '\x00' {
@@ -290,14 +467,28 @@ func draw_it(s tcell.Screen, percent float64, filled, width int, tip string) {
 		// s.SetContent(start+1, y, ' ', nil, style.Reverse(true))
 		// s.SetContent(x-1, y, ' ', nil, style.Reverse(true))
 	}
+	if (x - start) > len(partn) {
+		print_at(s, start+((x-start)/2)-(len(partn)/2), 4, partn, style.Foreground(tcell.GetColor("#000000")).Bold(true))
+	}
+	if (x - start) > len(size) {
+		print_at(s, start+((x-start)/2)-(len(size)/2), 5, size, style.Foreground(tcell.GetColor("#000000")).Bold(true))
+	}
 	start = x + 2
 }
 
 func print_it(s tcell.Screen, str string) {
-	for i, char := range str {
-		s.SetContent(10+i, pline, char, nil, tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#FF8040")))
+	s.SetContent(9, pline, symbols[7], nil, tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#FFFF00")))
+	s.SetContent(10, pline, ' ', nil, tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#FFFFFF")))
+	for i, char := range []rune(str) {
+		s.SetContent(12+i, pline, char, nil, tcell.StyleDefault.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#FFFFFF")))
 	}
 	pline++
+}
+
+func print_at(s tcell.Screen, x, y int, str string, style tcell.Style) {
+	for i, char := range []rune(str) {
+		s.SetContent(x+i, y, char, nil, style)
+	}
 }
 
 func draw_box(s tcell.Screen, x1, y1, x2, y2 int, style tcell.Style, chars_i string) {
