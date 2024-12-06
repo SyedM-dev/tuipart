@@ -29,6 +29,7 @@ func main() {
 		disk := "nvme0n1"
 		parts := getPartitions()
 		mounted_parts(disk, parts)
+		part_labels(disk, parts)
 		fmt.Println(parts)
 		for _, val := range parts {
 			x, y := get_used_p(disk+"p"+val[0], val[4])
@@ -86,6 +87,7 @@ func refresh(screen tcell.Screen) {
 	disk := "nvme0n1"
 	parts := getPartitions()
 	mounted_parts(disk, parts)
+	part_labels(disk, parts)
 	empty_parts := 0
 	if width > 100 {
 		print_at(screen, 3, 1, string(symbols[0]), tcell.StyleDefault.Foreground(tcell.GetColor("#00FF00")))
@@ -110,6 +112,7 @@ func refresh(screen tcell.Screen) {
 			empty_parts++
 		}
 	}
+	print_it(screen, fmt.Sprintf("The width is: %d & height is: %d", width, height))
 	for i, val := range parts {
 		x, ey := get_used_p(disk+"p"+val[0], val[4])
 		if ey != nil {
@@ -129,7 +132,6 @@ func refresh(screen tcell.Screen) {
 				fmt.Println("Error parsing used space:", err)
 				return
 			}
-			// print_it(screen, fmt.Sprint(float64(width)/100))
 			draw_it(screen, ((size/512)*100)-float64(empty_parts)/(float64(width)/86), int(math.Round(x)), width, val[4], "/dev/"+disk+"p"+val[0], val[3])
 		}
 		list_it(screen, width, height, i, val, x, disk)
@@ -170,7 +172,7 @@ func getPartitions() [][]string {
 	return x
 }
 
-func mounted_parts(disk string, parts [][]string) [][]string {
+func mounted_parts(disk string, parts [][]string) {
 	cmd := exec.Command("df", "-h") // Replace "/dev/sda" with the target disk
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -179,8 +181,6 @@ func mounted_parts(disk string, parts [][]string) [][]string {
 
 	// Convert output to string
 	outputStr := string(output)
-
-	x := [][]string{}
 
 	lines := strings.Split(outputStr, "\n")
 	for _, line := range lines {
@@ -193,17 +193,45 @@ func mounted_parts(disk string, parts [][]string) [][]string {
 					parts[i] = append(parts[i], strings.TrimSpace(matches[0][2]))
 				}
 			}
-			x = append(x, []string{matches[0][1], matches[0][2]})
 		}
 	}
 
 	for i, part := range parts {
-		if len(part) > 6 {
+		if len(part) <= 7 {
 			parts[i] = append(parts[i], "")
 		}
 	}
+}
 
-	return x
+func part_labels(disk string, parts [][]string) {
+	cmd := exec.Command("blkid") // Replace "/dev/sda" with the target disk
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Fatalf("Error executing command: %v", err)
+	}
+
+	// Convert output to string
+	outputStr := string(output)
+
+	lines := strings.Split(outputStr, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "LABEL") {
+			re := regexp.MustCompile(`^(\S+):.*?[^T]LABEL="([^"]*)"`)
+			matches := re.FindAllStringSubmatch(line, -1)
+			for i, part := range parts {
+				if "/dev/"+disk+"p"+part[0] == matches[0][1] {
+					// fmt.Println(matches, "/dev/"+disk+"p"+part[0])
+					parts[i] = append(parts[i], strings.TrimSpace(matches[0][2]))
+				}
+			}
+		}
+	}
+
+	for i, part := range parts {
+		if len(part) <= 8 {
+			parts[i] = append(parts[i], "")
+		}
+	}
 }
 
 func get_used_p(part, tip string) (float64, error) { // `tip` is turkish for type
@@ -331,12 +359,11 @@ func list_it(s tcell.Screen, width, _, index int, val []string, x float64, disk 
 		val[5],
 		tip,
 		val[7],
-		"IDK",
+		val[8],
 		val[3],
 		used_p,
 		val[6],
 	}
-	print_it(s, fmt.Sprint(val[5], val[6], val[7]))
 	categories_width := []int{
 		15,
 		20,
@@ -351,10 +378,16 @@ func list_it(s tcell.Screen, width, _, index int, val []string, x float64, disk 
 		start_n++
 		width_n := int((float64(categories_width[i]) / 100) * float64(width))
 		thing := " " + stuff[i]
-		if i != 2 {
+		if i == 0 {
 			// print_it(s, thing)
 			print_at(s, start_n, index+10, thing, tcell.StyleDefault)
-		} else {
+			if val[7] != "" {
+				print_at(s, start_n, index+10, thing, tcell.StyleDefault)
+				print_at(s, start_n+len(thing)+1, index+10, string(symbols[8]), tcell.StyleDefault.Foreground(tcell.GetColor("#D0D0D0")))
+			} else {
+				print_at(s, start_n, index+10, thing, tcell.StyleDefault)
+			}
+		} else if i == 2 {
 			color, exists := colors[val[4]]
 			var style tcell.Style
 			if exists {
@@ -364,6 +397,8 @@ func list_it(s tcell.Screen, width, _, index int, val []string, x float64, disk 
 			}
 			print_at(s, start_n+1, index+10, " ", style)
 			print_at(s, start_n+2, index+10, thing, tcell.StyleDefault)
+		} else {
+			print_at(s, start_n, index+10, thing, tcell.StyleDefault)
 		}
 		start_n += width_n
 	}
