@@ -24,25 +24,6 @@ var symbols []rune
 
 func main() {
 	symbols = []rune("󰞔󰪸󰸞")
-	/*
-		//  ╭───╮
-		//  │  │
-		//  ╰───╯
-		disk := "nvme0n1"
-		parts := getPartitions()
-		mounted_parts(disk, parts)
-		part_labels(disk, parts)
-		fmt.Println(parts)
-		for _, val := range parts {
-			x, y := get_used_p(disk+"p"+val[0], val[4])
-			if y != nil {
-				fmt.Println(disk+"p"+val[0], val[4], "--")
-			} else {
-				fmt.Println(disk+"p"+val[0], val[4], fmt.Sprintf("%.2f%%", x))
-			}
-		}
-		return
-		//*/
 	screen_tmp, err := tcell.NewScreen()
 	if err != nil {
 		log.Fatalf("Error creating screen: %v", err)
